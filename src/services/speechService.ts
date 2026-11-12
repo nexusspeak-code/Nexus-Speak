@@ -127,11 +127,10 @@ export class SpeechAudioEngine {
           this.recognition.maxAlternatives = 1;
           this.recognition.lang = langCode;
 
-          let finalTranscript = '';
-
           this.recognition.onresult = (event: any) => {
             let interimTranscript = '';
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
+            let finalTranscript = '';
+            for (let i = 0; i < event.results.length; ++i) {
               const res = event.results[i];
               if (res.isFinal) {
                 finalTranscript += res[0].transcript + ' ';
@@ -147,8 +146,12 @@ export class SpeechAudioEngine {
           };
 
           this.recognition.onerror = (event: any) => {
-            console.warn('SpeechRecognition warning:', event.error);
-            // Non-fatal errors like 'no-speech' should not kill the engine
+            console.warn('SpeechRecognition error:', event.error);
+            if (event.error === 'not-allowed') {
+              onError('Microphone permission blocked. Please allow microphone in your browser or device settings.');
+            } else if (event.error === 'network') {
+              onError('Voice recognition network error. Please check your internet connection.');
+            }
           };
 
           this.recognition.onend = () => {
