@@ -147,10 +147,19 @@ function speechAndTranslationApiPlugin(): Plugin {
   };
 }
 
+function cleanHtmlForWebView(): Plugin {
+  return {
+    name: 'clean-html-for-webview',
+    transformIndexHtml(html) {
+      return html.replace(/\scrossorigin(=["'][^"']*["'])?/g, '');
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
-  plugins: [react(), speechAndTranslationApiPlugin()],
+  plugins: [react(), speechAndTranslationApiPlugin(), cleanHtmlForWebView()],
   server: {
     port: 5174,
     strictPort: true,

@@ -10,6 +10,8 @@ import android.provider.Settings;
 import android.view.View;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -22,14 +24,14 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import java.io.InputStream;
+
 public class MainActivity extends AppCompatActivity {
     // =========================================================================
     // AUTO-UPDATE CONFIGURATION (Live Cloud Web URL)
     // =========================================================================
-    // When you deploy your web app (e.g. Netlify/Vercel), put your live URL here.
-    // Example: "https://nexusspeak.netlify.app"
-    // Every time you change code, all users' mobile apps update automatically!
-    // If empty or offline, it safely falls back to local assets.
+    // If you have deployed your app to Vercel, set your live URL here.
+    // Example: "https://nexus-speak.vercel.app"
     public static final String LIVE_AUTO_UPDATE_URL = "";
     private static final String LOCAL_FALLBACK_URL = "file:///android_asset/www/index.html";
 
@@ -63,10 +65,15 @@ public class MainActivity extends AppCompatActivity {
             ws.setDatabaseEnabled(true);
             ws.setAllowFileAccess(true);
             ws.setAllowContentAccess(true);
+            ws.setAllowFileAccessFromFileURLs(true);
+            ws.setAllowUniversalAccessFromFileURLs(true);
             ws.setMediaPlaybackRequiresUserGesture(false);
             ws.setUseWideViewPort(true);
             ws.setLoadWithOverviewMode(true);
             ws.setCacheMode(WebSettings.LOAD_DEFAULT);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            }
 
             webView.setWebChromeClient(new WebChromeClient() {
                 @Override
@@ -80,6 +87,36 @@ public class MainActivity extends AppCompatActivity {
             });
 
             webView.setWebViewClient(new WebViewClient() {
+                @Override
+                public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                    Uri uri = request.getUrl();
+                    String path = uri.getPath();
+                    if (path != null && uri.getScheme() != null && uri.getScheme().equals("file")) {
+                        try {
+                            String assetPath = path;
+                            if (assetPath.startsWith("/android_asset/")) {
+                                assetPath = assetPath.substring("/android_asset/".length());
+                            } else if (assetPath.startsWith("/")) {
+                                assetPath = "www" + assetPath;
+                            }
+
+                            InputStream is = getAssets().open(assetPath);
+                            String mime = "text/plain";
+                            if (path.endsWith(".html")) mime = "text/html";
+                            else if (path.endsWith(".js") || path.endsWith(".mjs")) mime = "application/javascript";
+                            else if (path.endsWith(".css")) mime = "text/css";
+                            else if (path.endsWith(".png")) mime = "image/png";
+                            else if (path.endsWith(".jpg") || path.endsWith(".jpeg")) mime = "image/jpeg";
+                            else if (path.endsWith(".svg")) mime = "image/svg+xml";
+                            else if (path.endsWith(".json")) mime = "application/json";
+
+                            return new WebResourceResponse(mime, "UTF-8", is);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    return super.shouldInterceptRequest(view, request);
+                }
+
                 @Override
                 public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
                     // If live cloud URL is unreachable or user is offline, load bundled local assets
