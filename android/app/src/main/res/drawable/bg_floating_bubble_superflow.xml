@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Outer Glow Ring -->
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:type="sweep"
+                android:startColor="#6366F1"
+                android:centerColor="#EC4899"
+                android:endColor="#06B6D4" />
+        </shape>
+    </item>
+    <!-- Inner Dark Core with 2dp border inset -->
+    <item
+        android:bottom="2dp"
+        android:left="2dp"
+        android:right="2dp"
+        android:top="2dp">
+        <shape android:shape="oval">
+            <gradient
+                android:type="linear"
+                android:angle="135"
+                android:startColor="#1E1B4B"
+                android:centerColor="#0F172A"
+                android:endColor="#18181B" />
+        </shape>
+    </item>
+</layer-list>

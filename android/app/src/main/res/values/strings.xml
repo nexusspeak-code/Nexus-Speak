@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Nexus Speak</string>
+    <string name="tagline">Speak Naturally. Write &amp; Translate Effortlessly.</string>
+    <string name="floating_service_running">Nexus Speak Floating Assistant is active</string>
+    <string name="floating_service_desc">Tap the floating bubble anytime while using WhatsApp to speak and translate</string>
+    <string name="btn_start_overlay">Enable Floating Assistant</string>
+    <string name="btn_stop_overlay">Stop Floating Assistant</string>
+    <string name="permission_overlay_title">Display Over Other Apps</string>
+    <string name="permission_overlay_desc">Required to float over WhatsApp, Telegram, and other apps</string>
+    <string name="permission_audio_title">Microphone Access</string>
+    <string name="permission_audio_desc">Required to capture your voice accurately</string>
+    <string name="status_granted">Granted ✓</string>
+    <string name="status_grant_now">Grant Permission ➔</string>
+    <string name="tap_to_speak">Tap to Speak</string>
+    <string name="listening">Listening… Speak now</string>
+    <string name="processing">Translating speech…</string>
+    <string name="copied_toast">✓ Copied to clipboard! Ready to paste.</string>
+</resources>

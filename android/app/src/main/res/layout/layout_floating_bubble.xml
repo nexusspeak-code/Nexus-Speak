@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/layout_bubble_root"
+    android:layout_width="60dp"
+    android:layout_height="60dp"
+    android:background="@drawable/bg_floating_bubble_superflow"
+    android:clickable="true"
+    android:focusable="true"
+    android:elevation="16dp">
+
+    <!-- Glowing Center Mic Icon -->
+    <ImageView
+        android:id="@+id/img_bubble_mic"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:layout_gravity="center"
+        android:src="@drawable/ic_mic"
+        android:contentDescription="Superflow Floating Mic" />
+
+    <!-- Mini AI Badge -->
+    <TextView
+        android:id="@+id/tv_bubble_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="2dp"
+        android:layout_marginBottom="2dp"
+        android:background="#6366F1"
+        android:paddingHorizontal="4dp"
+        android:paddingVertical="1dp"
+        android:text="AI"
+        android:textColor="#FFFFFF"
+        android:textSize="8sp"
+        android:textStyle="bold" />
+
+</FrameLayout>
