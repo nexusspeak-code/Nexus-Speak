@@ -23,6 +23,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.webkit.WebViewAssetLoader;
 
 import java.io.InputStream;
 
@@ -33,7 +34,7 @@ public class MainActivity extends AppCompatActivity {
     // If you have deployed your app to Vercel, set your live URL here.
     // Example: "https://nexus-speak.vercel.app"
     public static final String LIVE_AUTO_UPDATE_URL = "";
-    private static final String LOCAL_FALLBACK_URL = "file:///android_asset/www/index.html";
+    private static final String LOCAL_FALLBACK_URL = "https://appassets.androidplatform.net/assets/www/index.html";
 
     private static final int REQUEST_OVERLAY_CODE = 101;
     private static final int REQUEST_AUDIO_PERM_CODE = 102;
@@ -75,6 +76,10 @@ public class MainActivity extends AppCompatActivity {
                 ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
             }
 
+            final WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()
+                    .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                    .build();
+
             webView.setWebChromeClient(new WebChromeClient() {
                 @Override
                 public void onPermissionRequest(final PermissionRequest request) {
@@ -85,7 +90,7 @@ public class MainActivity extends AppCompatActivity {
                             } else {
                                 pendingWebPermissionRequest = request;
                                 ActivityCompat.requestPermissions(MainActivity.this,
-                                        new String[]{Manifest.permission.RECORD_AUDIO},
+                                        new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.MODIFY_AUDIO_SETTINGS},
                                         REQUEST_AUDIO_PERM_CODE);
                             }
                         }
@@ -96,6 +101,12 @@ public class MainActivity extends AppCompatActivity {
             webView.setWebViewClient(new WebViewClient() {
                 @Override
                 public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                    WebResourceResponse response = assetLoader.shouldInterceptRequest(request.getUrl());
+                    if (response != null) {
+                        return response;
+                    }
+
+                    // Fallback local file interceptor
                     Uri uri = request.getUrl();
                     String path = uri.getPath();
                     if (path != null && uri.getScheme() != null && uri.getScheme().equals("file")) {
@@ -126,14 +137,13 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                    // If live cloud URL is unreachable or user is offline, load bundled local assets
-                    if (!failingUrl.startsWith("file:///android_asset/")) {
+                    if (failingUrl != null && !failingUrl.contains("appassets.androidplatform.net")) {
                         view.loadUrl(LOCAL_FALLBACK_URL);
                     }
                 }
             });
 
-            // If live auto-update URL is configured, load live; otherwise load local assets
+            // If live auto-update URL is configured, load live; otherwise load local assets via secure WebViewAssetLoader
             if (LIVE_AUTO_UPDATE_URL != null && !LIVE_AUTO_UPDATE_URL.trim().isEmpty()) {
                 webView.loadUrl(LIVE_AUTO_UPDATE_URL);
             } else {
@@ -149,6 +159,7 @@ public class MainActivity extends AppCompatActivity {
         if (layoutFloatingPill != null) {
             layoutFloatingPill.setOnClickListener(v -> {
                 if (!hasOverlayPermission()) {
+                    Toast.makeText(this, "Please enable 'Display over other apps' to activate floating bubble", Toast.LENGTH_SHORT).show();
                     requestOverlayPermission();
                     return;
                 }
@@ -187,7 +198,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void requestAudioPermission() {
         ActivityCompat.requestPermissions(this,
-                new String[]{Manifest.permission.RECORD_AUDIO},
+                new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.MODIFY_AUDIO_SETTINGS},
                 REQUEST_AUDIO_PERM_CODE);
     }
 
@@ -195,6 +206,7 @@ public class MainActivity extends AppCompatActivity {
         java.util.List<String> list = new java.util.ArrayList<>();
         if (!hasAudioPermission()) {
             list.add(Manifest.permission.RECORD_AUDIO);
+            list.add(Manifest.permission.MODIFY_AUDIO_SETTINGS);
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -203,6 +215,19 @@ public class MainActivity extends AppCompatActivity {
         }
         if (!list.isEmpty()) {
             ActivityCompat.requestPermissions(this, list.toArray(new String[0]), REQUEST_ALL_PERMS_CODE);
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_OVERLAY_CODE) {
+            if (hasOverlayPermission()) {
+                Toast.makeText(this, "Permission granted! Starting Floating Bubble...", Toast.LENGTH_SHORT).show();
+                startFloatingService();
+            } else {
+                Toast.makeText(this, "Display over other apps permission is required for the floating bubble", Toast.LENGTH_LONG).show();
+            }
         }
     }
 
@@ -231,27 +256,40 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startFloatingService() {
-        Intent serviceIntent = new Intent(this, FloatingVoiceService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent);
-        } else {
-            startService(serviceIntent);
+        if (!hasOverlayPermission()) {
+            requestOverlayPermission();
+            return;
         }
-        isServiceRunning = true;
-        if (tvFloatingPillText != null) {
-            tvFloatingPillText.setText("🛑 Stop Bubble");
+        try {
+            Intent serviceIntent = new Intent(this, FloatingVoiceService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent);
+            } else {
+                startService(serviceIntent);
+            }
+            isServiceRunning = true;
+            if (tvFloatingPillText != null) {
+                tvFloatingPillText.setText("🛑 Stop Bubble");
+            }
+            Toast.makeText(this, "Floating Bubble Activated! Look for the mic icon on your screen.", Toast.LENGTH_LONG).show();
+        } catch (Throwable e) {
+            e.printStackTrace();
+            Toast.makeText(this, "Could not start bubble: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
-        Toast.makeText(this, "Floating Bubble Activated! Open WhatsApp to test it.", Toast.LENGTH_LONG).show();
     }
 
     private void stopFloatingService() {
-        Intent serviceIntent = new Intent(this, FloatingVoiceService.class);
-        stopService(serviceIntent);
-        isServiceRunning = false;
-        if (tvFloatingPillText != null) {
-            tvFloatingPillText.setText("🚀 Floating Bubble");
+        try {
+            Intent serviceIntent = new Intent(this, FloatingVoiceService.class);
+            stopService(serviceIntent);
+            isServiceRunning = false;
+            if (tvFloatingPillText != null) {
+                tvFloatingPillText.setText("🚀 Floating Bubble");
+            }
+            Toast.makeText(this, "Floating Assistant Stopped", Toast.LENGTH_SHORT).show();
+        } catch (Throwable e) {
+            e.printStackTrace();
         }
-        Toast.makeText(this, "Floating Assistant Stopped", Toast.LENGTH_SHORT).show();
     }
 
     @Override

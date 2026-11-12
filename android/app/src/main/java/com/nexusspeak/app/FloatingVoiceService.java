@@ -83,7 +83,17 @@ public class FloatingVoiceService extends Service {
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
-        startForeground(NOTIFICATION_ID, createNotification());
+        try {
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(NOTIFICATION_ID, createNotification(), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+            } else {
+                startForeground(NOTIFICATION_ID, createNotification());
+            }
+        } catch (Throwable e) {
+            try {
+                startForeground(NOTIFICATION_ID, createNotification());
+            } catch (Throwable ignored) {}
+        }
 
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         clipboardManager = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
@@ -162,7 +172,15 @@ public class FloatingVoiceService extends Service {
             }
         });
 
-        windowManager.addView(bubbleView, bubbleParams);
+        try {
+            if (windowManager != null && bubbleView != null) {
+                windowManager.addView(bubbleView, bubbleParams);
+            }
+        } catch (Throwable e) {
+            android.util.Log.e("FloatingVoiceService", "Error attaching bubble view", e);
+            Toast.makeText(this, "Please enable 'Display over other apps' in Settings", Toast.LENGTH_LONG).show();
+            stopSelf();
+        }
     }
 
     private void snapBubbleToEdge() {
@@ -473,7 +491,15 @@ public class FloatingVoiceService extends Service {
                 windowManager.removeView(widgetView);
             }
             if (bubbleView != null && bubbleView.getWindowToken() == null) {
+                try {
+            if (windowManager != null && bubbleView != null) {
                 windowManager.addView(bubbleView, bubbleParams);
+            }
+        } catch (Throwable e) {
+            android.util.Log.e("FloatingVoiceService", "Error attaching bubble view", e);
+            Toast.makeText(this, "Please enable 'Display over other apps' in Settings", Toast.LENGTH_LONG).show();
+            stopSelf();
+        }
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -516,14 +542,20 @@ public class FloatingVoiceService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (speechHelper != null) {
-            speechHelper.stopListening();
-        }
-        if (bubbleView != null && bubbleView.getWindowToken() != null) {
-            windowManager.removeView(bubbleView);
-        }
-        if (widgetView != null && widgetView.getWindowToken() != null) {
-            windowManager.removeView(widgetView);
-        }
+        try {
+            if (speechHelper != null) {
+                speechHelper.stopListening();
+            }
+        } catch (Throwable ignored) {}
+        try {
+            if (bubbleView != null && bubbleView.getWindowToken() != null && windowManager != null) {
+                windowManager.removeView(bubbleView);
+            }
+        } catch (Throwable ignored) {}
+        try {
+            if (widgetView != null && widgetView.getWindowToken() != null && windowManager != null) {
+                windowManager.removeView(widgetView);
+            }
+        } catch (Throwable ignored) {}
     }
 }

@@ -28,7 +28,9 @@ export const HeaderIsland: React.FC<HeaderIslandProps> = ({
   useEffect(() => {
     // Check if running as standalone PWA or native APK
     const standaloneCheck = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-    const isNativeApp = window.location.protocol === 'file:' || /wv|Android.*Version\/[\d.]+/i.test(navigator.userAgent);
+    const isNativeApp = window.location.protocol === 'file:' || 
+      window.location.hostname === 'appassets.androidplatform.net' || 
+      /wv|Android.*Version\/[\d.]+/i.test(navigator.userAgent);
     setIsStandalone(Boolean(standaloneCheck) || Boolean(isNativeApp));
 
     // Capture PWA beforeinstallprompt
