@@ -163,8 +163,12 @@ export const RecordingOverlay: React.FC<RecordingOverlayProps> = ({
           {interimTranscript || 'Speak naturally into your device microphone...'}
         </div>
 
-        <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--text-muted)' }}>
-          Active Language: <strong>{sourceLang}</strong> • Echo cancellation enabled
+        <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+          <span>Active Language: <strong>{sourceLang}</strong></span>
+          <span>•</span>
+          <span style={{ color: frequencyData && frequencyData.some((v) => v > 18) ? 'var(--accent-emerald)' : 'var(--text-muted)', fontWeight: 600 }}>
+            {frequencyData && frequencyData.some((v) => v > 18) ? '● Voice Audio Detected' : 'Listening...'}
+          </span>
         </div>
       </div>
 

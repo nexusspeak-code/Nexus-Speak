@@ -66,6 +66,16 @@ export class SpeechAudioEngine {
 
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       this.audioContext = new AudioCtx();
+
+      // Ensure AudioContext is running (crucial for modern Chrome / Safari autoplay policy)
+      if (this.audioContext.state === 'suspended') {
+        try {
+          await this.audioContext.resume();
+        } catch (resumeErr) {
+          console.warn('AudioContext resume warning:', resumeErr);
+        }
+      }
+
       const source = this.audioContext.createMediaStreamSource(this.mediaStream);
 
       // Setup AnalyserNode for live visualizer
@@ -82,7 +92,12 @@ export class SpeechAudioEngine {
         this.audioChunks.push(new Float32Array(channelData));
       };
       source.connect(this.processor);
-      this.processor.connect(this.audioContext.destination);
+
+      // Connect through a SILENT gain node (0 volume) to keep processor alive WITHOUT speaker feedback/echo suppression
+      const silenceGain = this.audioContext.createGain();
+      silenceGain.gain.value = 0;
+      this.processor.connect(silenceGain);
+      silenceGain.connect(this.audioContext.destination);
 
       this.visualizerCallback = onVisualizer;
       this.isRecording = true;
@@ -102,7 +117,7 @@ export class SpeechAudioEngine {
       };
       updateMeter();
 
-      // Attempt live SpeechRecognition preview if available in browser
+      // Setup live SpeechRecognition for Chrome, Edge, Safari, Android Chrome & PWA
       const SpeechRec = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRec) {
         try {
@@ -112,25 +127,32 @@ export class SpeechAudioEngine {
           this.recognition.maxAlternatives = 1;
           this.recognition.lang = langCode;
 
+          let finalTranscript = '';
+
           this.recognition.onresult = (event: any) => {
-            let fullTranscript = '';
-            for (let i = 0; i < event.results.length; ++i) {
-              if (event.results[i] && event.results[i][0]) {
-                fullTranscript += event.results[i][0].transcript + ' ';
+            let interimTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              const res = event.results[i];
+              if (res.isFinal) {
+                finalTranscript += res[0].transcript + ' ';
+              } else {
+                interimTranscript += res[0].transcript;
               }
             }
-            if (fullTranscript.trim()) {
-              this.livePreviewText = fullTranscript.trim();
-              onSpeechResult(this.livePreviewText, true);
+            const fullText = (finalTranscript + interimTranscript).trim();
+            if (fullText) {
+              this.livePreviewText = fullText;
+              onSpeechResult(this.livePreviewText, Boolean(finalTranscript));
             }
           };
 
           this.recognition.onerror = (event: any) => {
-            console.warn('Browser SpeechRecognition warning:', event.error);
+            console.warn('SpeechRecognition warning:', event.error);
+            // Non-fatal errors like 'no-speech' should not kill the engine
           };
 
           this.recognition.onend = () => {
-            // Auto-restart if user is still actively recording (prevents stopping on pauses)
+            // Auto-restart if user is still actively recording
             if (this.isRecording && !this.isPaused && this.recognition) {
               try {
                 this.recognition.start();
@@ -140,7 +162,7 @@ export class SpeechAudioEngine {
 
           this.recognition.start();
         } catch (e) {
-          console.warn('SpeechRecognition could not start preview:', e);
+          console.warn('SpeechRecognition initialization error:', e);
         }
       }
 

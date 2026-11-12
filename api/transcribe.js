@@ -1,4 +1,10 @@
 // Vercel Serverless Function: /api/transcribe
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,12 +23,23 @@ export default async function handler(req, res) {
     const lang = req.query.lang || 'ta-IN';
     const googleSpeechKey = 'AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw';
 
-    // Collect request body
-    const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    // Safely collect raw body buffer
+    let bodyBuffer;
+    if (req.body && Buffer.isBuffer(req.body)) {
+      bodyBuffer = req.body;
+    } else if (req.body && typeof req.body === 'string') {
+      bodyBuffer = Buffer.from(req.body);
+    } else {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+      }
+      bodyBuffer = Buffer.concat(chunks);
     }
-    const bodyBuffer = Buffer.concat(chunks);
+
+    if (!bodyBuffer || bodyBuffer.length === 0) {
+      return res.status(200).json({ transcript: '', language: lang });
+    }
 
     // Extract PCM data if WAV header is present
     let pcmData = bodyBuffer;
@@ -60,9 +77,8 @@ export default async function handler(req, res) {
       } catch (e) {}
     }
 
-    return res.status(200).json({ transcript, language: lang });
+    return res.status(200).json({ transcript: transcript.trim(), language: lang });
   } catch (err) {
     return res.status(500).json({ error: err.message, transcript: '' });
   }
 }
-
