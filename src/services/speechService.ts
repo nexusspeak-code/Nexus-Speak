@@ -56,13 +56,18 @@ export class SpeechAudioEngine {
         throw new Error('Microphone requires HTTPS (Secure Context) or microphone permission in your app settings.');
       }
 
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      try {
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      } catch (constraintErr: any) {
+        console.warn('Advanced audio constraints failed, trying basic audio constraints:', constraintErr);
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
 
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       this.audioContext = new AudioCtx();
@@ -173,7 +178,9 @@ export class SpeechAudioEngine {
     } catch (err: any) {
       this.cleanup();
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        onError('Microphone access blocked. Please allow microphone access in your browser.');
+        onError('Microphone access blocked. Please allow microphone access in your app settings.');
+      } else if (err.message && err.message.toLowerCase().includes('could not start audio source')) {
+        onError('Microphone access blocked. Please enable Microphone permission in Settings > Apps > Nexus Speak > Permissions.');
       } else {
         onError('Microphone error: ' + (err.message || 'Device error'));
       }

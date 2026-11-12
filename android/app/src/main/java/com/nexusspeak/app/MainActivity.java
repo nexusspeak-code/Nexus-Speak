@@ -38,20 +38,20 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_OVERLAY_CODE = 101;
     private static final int REQUEST_AUDIO_PERM_CODE = 102;
     private static final int REQUEST_NOTIF_PERM_CODE = 103;
+    private static final int REQUEST_ALL_PERMS_CODE = 104;
 
     private WebView webView;
     private LinearLayout layoutFloatingPill;
     private TextView tvFloatingPillText;
     private boolean isServiceRunning = false;
+    private PermissionRequest pendingWebPermissionRequest;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        checkAudioPermission();
-        checkNotificationPermission();
-
+        requestInitialPermissions();
         setupWebView();
         setupFloatingPill();
     }
@@ -80,7 +80,14 @@ public class MainActivity extends AppCompatActivity {
                 public void onPermissionRequest(final PermissionRequest request) {
                     runOnUiThread(() -> {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                            request.grant(request.getResources());
+                            if (hasAudioPermission()) {
+                                request.grant(request.getResources());
+                            } else {
+                                pendingWebPermissionRequest = request;
+                                ActivityCompat.requestPermissions(MainActivity.this,
+                                        new String[]{Manifest.permission.RECORD_AUDIO},
+                                        REQUEST_AUDIO_PERM_CODE);
+                            }
                         }
                     });
                 }
@@ -184,17 +191,42 @@ public class MainActivity extends AppCompatActivity {
                 REQUEST_AUDIO_PERM_CODE);
     }
 
-    private void checkNotificationPermission() {
+    private void requestInitialPermissions() {
+        java.util.List<String> list = new java.util.ArrayList<>();
+        if (!hasAudioPermission()) {
+            list.add(Manifest.permission.RECORD_AUDIO);
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIF_PERM_CODE);
+                list.add(Manifest.permission.POST_NOTIFICATIONS);
             }
+        }
+        if (!list.isEmpty()) {
+            ActivityCompat.requestPermissions(this, list.toArray(new String[0]), REQUEST_ALL_PERMS_CODE);
         }
     }
 
-    private void checkAudioPermission() {
-        if (!hasAudioPermission()) {
-            requestAudioPermission();
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_AUDIO_PERM_CODE || requestCode == REQUEST_ALL_PERMS_CODE) {
+            boolean audioGranted = false;
+            for (int i = 0; i < permissions.length; i++) {
+                if (Manifest.permission.RECORD_AUDIO.equals(permissions[i]) && grantResults[i] == PackageManager.PERMISSION_GRANTED) {
+                    audioGranted = true;
+                    break;
+                }
+            }
+            if (pendingWebPermissionRequest != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    if (audioGranted) {
+                        pendingWebPermissionRequest.grant(pendingWebPermissionRequest.getResources());
+                    } else {
+                        pendingWebPermissionRequest.deny();
+                    }
+                }
+                pendingWebPermissionRequest = null;
+            }
         }
     }
 
