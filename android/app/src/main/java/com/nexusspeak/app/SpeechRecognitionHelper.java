@@ -34,7 +34,7 @@ public class SpeechRecognitionHelper {
     }
 
     public void startListening(String languageCode, SpeechCallback callback) {
-        stopListening();
+        cancelAndDestroy();
 
         try {
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context);
@@ -45,6 +45,9 @@ public class SpeechRecognitionHelper {
             intent.putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, languageCode);
             intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
             intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3);
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L);
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L);
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 2500L);
 
             speechRecognizer.setRecognitionListener(new RecognitionListener() {
                 @Override
@@ -78,23 +81,25 @@ public class SpeechRecognitionHelper {
                     String message = getErrorMessage(error);
                     Log.e(TAG, "SpeechRecognizer error: " + message + " (code " + error + ")");
                     callback.onSpeechError(message);
+                    cancelAndDestroy();
                 }
 
                 @Override
                 public void onResults(Bundle results) {
                     isListening = false;
-                    ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                    ArrayList<String> matches = results != null ? results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
                     if (matches != null && !matches.isEmpty()) {
                         String recognized = matches.get(0);
                         callback.onSpeechComplete(recognized);
                     } else {
                         callback.onSpeechError("No voice detected. Please speak clearly.");
                     }
+                    cancelAndDestroy();
                 }
 
                 @Override
                 public void onPartialResults(Bundle partialResults) {
-                    ArrayList<String> matches = partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                    ArrayList<String> matches = partialResults != null ? partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
                     if (matches != null && !matches.isEmpty()) {
                         callback.onSpeechPartial(matches.get(0));
                     }
@@ -117,6 +122,15 @@ public class SpeechRecognitionHelper {
         if (speechRecognizer != null) {
             try {
                 speechRecognizer.stopListening();
+            } catch (Exception ignored) {
+            }
+        }
+        isListening = false;
+    }
+
+    public void cancelAndDestroy() {
+        if (speechRecognizer != null) {
+            try {
                 speechRecognizer.cancel();
                 speechRecognizer.destroy();
             } catch (Exception ignored) {

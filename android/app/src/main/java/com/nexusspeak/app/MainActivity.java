@@ -143,11 +143,104 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
+            // Register Native Speech Recognition Bridge for Android
+            webView.addJavascriptInterface(new AndroidSpeechBridge(), "AndroidSpeechBridge");
+
             // If live auto-update URL is configured, load live; otherwise load local assets via secure WebViewAssetLoader
             if (LIVE_AUTO_UPDATE_URL != null && !LIVE_AUTO_UPDATE_URL.trim().isEmpty()) {
                 webView.loadUrl(LIVE_AUTO_UPDATE_URL);
             } else {
                 webView.loadUrl(LOCAL_FALLBACK_URL);
+            }
+        }
+    }
+
+    public class AndroidSpeechBridge {
+        private SpeechRecognitionHelper speechHelper;
+
+        public AndroidSpeechBridge() {
+            speechHelper = new SpeechRecognitionHelper(MainActivity.this);
+        }
+
+        @android.webkit.JavascriptInterface
+        public boolean isAvailable() {
+            return speechHelper != null && speechHelper.isAvailable();
+        }
+
+        @android.webkit.JavascriptInterface
+        public void startListening(final String langCode) {
+            runOnUiThread(() -> {
+                if (!hasAudioPermission()) {
+                    requestAudioPermission();
+                    return;
+                }
+                if (speechHelper == null) {
+                    speechHelper = new SpeechRecognitionHelper(MainActivity.this);
+                }
+                speechHelper.startListening(langCode, new SpeechRecognitionHelper.SpeechCallback() {
+                    @Override
+                    public void onSpeechStart() {
+                        runOnUiThread(() -> {
+                            if (webView != null) {
+                                webView.evaluateJavascript("window.onNativeSpeechStart && window.onNativeSpeechStart();", null);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onSpeechPartial(String partial) {
+                        runOnUiThread(() -> {
+                            if (webView != null && partial != null) {
+                                String safe = org.json.JSONObject.quote(partial);
+                                webView.evaluateJavascript("window.onNativeSpeechPartial && window.onNativeSpeechPartial(" + safe + ");", null);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onSpeechComplete(String finalText) {
+                        runOnUiThread(() -> {
+                            if (webView != null && finalText != null) {
+                                String safe = org.json.JSONObject.quote(finalText);
+                                webView.evaluateJavascript("window.onNativeSpeechComplete && window.onNativeSpeechComplete(" + safe + ");", null);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onSpeechError(String error) {
+                        runOnUiThread(() -> {
+                            if (webView != null) {
+                                String safe = org.json.JSONObject.quote(error != null ? error : "Error");
+                                webView.evaluateJavascript("window.onNativeSpeechError && window.onNativeSpeechError(" + safe + ");", null);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onRmsdBChanged(float rmsdB) {
+                        runOnUiThread(() -> {
+                            if (webView != null) {
+                                webView.evaluateJavascript("window.onNativeRmsChanged && window.onNativeRmsChanged(" + rmsdB + ");", null);
+                            }
+                        });
+                    }
+                });
+            });
+        }
+
+        @android.webkit.JavascriptInterface
+        public void stopListening() {
+            runOnUiThread(() -> {
+                if (speechHelper != null) {
+                    speechHelper.stopListening();
+                }
+            });
+        }
+
+        public void destroy() {
+            if (speechHelper != null) {
+                speechHelper.cancelAndDestroy();
             }
         }
     }

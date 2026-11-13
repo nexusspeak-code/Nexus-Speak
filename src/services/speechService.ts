@@ -122,55 +122,95 @@ export class SpeechAudioEngine {
       };
       updateMeter();
 
-      // Setup live SpeechRecognition for Chrome, Edge, Safari, Android Chrome & PWA
-      const SpeechRec = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRec) {
+      // 1. Check for Native Android Speech Bridge (Best & fastest on Android, supports Tamil, English, Hindi, Telugu, Malayalam natively)
+      const androidBridge = (window as any).AndroidSpeechBridge;
+      if (androidBridge && typeof androidBridge.startListening === 'function') {
         try {
-          this.recognition = new SpeechRec();
-          this.recognition.continuous = true;
-          this.recognition.interimResults = true;
-          this.recognition.maxAlternatives = 1;
-          this.recognition.lang = langCode;
+          (window as any).onNativeSpeechStart = () => {
+            console.log('AndroidSpeechBridge: Speech started');
+          };
 
-          this.recognition.onresult = (event: any) => {
-            let interimTranscript = '';
-            let finalTranscript = '';
-            for (let i = 0; i < event.results.length; ++i) {
-              const res = event.results[i];
-              if (res.isFinal) {
-                finalTranscript += res[0].transcript + ' ';
-              } else {
-                interimTranscript += res[0].transcript;
+          (window as any).onNativeSpeechPartial = (partial: string) => {
+            if (partial && partial.trim()) {
+              this.livePreviewText = partial.trim();
+              onSpeechResult(this.livePreviewText, false);
+            }
+          };
+
+          (window as any).onNativeSpeechComplete = (finalText: string) => {
+            if (finalText && finalText.trim()) {
+              this.livePreviewText = finalText.trim();
+              onSpeechResult(this.livePreviewText, true);
+            }
+          };
+
+          (window as any).onNativeSpeechError = (errMsg: string) => {
+            console.warn('AndroidSpeechBridge warning/error:', errMsg);
+          };
+
+          (window as any).onNativeRmsChanged = (rmsdB: number) => {
+            if (this.visualizerCallback && this.isRecording) {
+              const val = Math.min(255, Math.max(15, Math.floor((rmsdB + 2) * 25)));
+              const meter = new Uint8Array(32).fill(val);
+              this.visualizerCallback(meter);
+            }
+          };
+
+          androidBridge.startListening(langCode);
+        } catch (bridgeErr) {
+          console.warn('AndroidSpeechBridge start error:', bridgeErr);
+        }
+      } else {
+        // 2. Setup live SpeechRecognition for Chrome, Edge, Safari, Android Chrome & PWA
+        const SpeechRec = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRec) {
+          try {
+            this.recognition = new SpeechRec();
+            this.recognition.continuous = true;
+            this.recognition.interimResults = true;
+            this.recognition.maxAlternatives = 1;
+            this.recognition.lang = langCode;
+
+            this.recognition.onresult = (event: any) => {
+              let interimTranscript = '';
+              let finalTranscript = '';
+              for (let i = 0; i < event.results.length; ++i) {
+                const res = event.results[i];
+                if (res.isFinal) {
+                  finalTranscript += res[0].transcript + ' ';
+                } else {
+                  interimTranscript += res[0].transcript;
+                }
               }
-            }
-            const fullText = (finalTranscript + interimTranscript).trim();
-            if (fullText) {
-              this.livePreviewText = fullText;
-              onSpeechResult(this.livePreviewText, Boolean(finalTranscript));
-            }
-          };
+              const fullText = (finalTranscript + interimTranscript).trim();
+              if (fullText) {
+                this.livePreviewText = fullText;
+                onSpeechResult(this.livePreviewText, Boolean(finalTranscript));
+              }
+            };
 
-          this.recognition.onerror = (event: any) => {
-            console.warn('SpeechRecognition error:', event.error);
-            if (event.error === 'not-allowed') {
-              onError('Microphone permission blocked. Please allow microphone in your browser or device settings.');
-            } else if (event.error === 'network') {
-              onError('Voice recognition network error. Please check your internet connection.');
-            }
-          };
+            this.recognition.onerror = (event: any) => {
+              console.warn('SpeechRecognition error:', event.error);
+              if (event.error === 'not-allowed') {
+                onError('Microphone permission blocked. Please allow microphone in your browser or device settings.');
+              } else if (event.error === 'network') {
+                onError('Voice recognition network error. Please check your internet connection.');
+              }
+            };
 
-          this.recognition.onend = () => {
-            // Auto-restart if user is still actively recording
-            if (this.isRecording && !this.isPaused && this.recognition) {
-              try {
-                this.recognition.start();
-              } catch (e) {}
-            }
-          };
+            this.recognition.onend = () => {
+              // Auto-restart if user is still actively recording
+              if (this.isRecording && !this.isPaused && this.recognition) {
+                try {
+                  this.recognition.start();
+                } catch (e) {}
+              }
+            };
 
-          this.recognition.start();
-        } catch (e) {
-          console.warn('SpeechRecognition initialization error:', e);
+            this.recognition.start();
+          } catch (e) {
+            console.warn('SpeechRecognition initialization error:', e);
+          }
         }
       }
 
@@ -286,6 +326,41 @@ export class SpeechAudioEngine {
       // Ignored
     }
 
+    // 3. Fallback: Direct Google Cloud Chromium Speech Recognition API
+    try {
+      const googleSpeechKey = 'AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw';
+      const targetUrl = `https://www.google.com/speech-api/v2/recognize?client=chromium&lang=${encodeURIComponent(langCode)}&key=${googleSpeechKey}`;
+      const res = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'audio/l16; rate=16000',
+        },
+        body: audioBlob,
+      });
+
+      if (res.ok) {
+        const textResp = await res.text();
+        const lines = textResp.split('\n');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const parsed = JSON.parse(line);
+            if (parsed.result && parsed.result[0] && parsed.result[0].alternative && parsed.result[0].alternative[0]) {
+              const text = parsed.result[0].alternative[0].transcript;
+              if (text && text.trim()) {
+                return {
+                  transcript: text.trim(),
+                  confidence: parsed.result[0].alternative[0].confidence || 0.9,
+                };
+              }
+            }
+          } catch (e) {}
+        }
+      }
+    } catch (directErr) {
+      console.warn('Direct Google speech API error:', directErr);
+    }
+
     return {
       transcript: '',
       error: 'No speech recognized',
@@ -299,6 +374,14 @@ export class SpeechAudioEngine {
   private cleanup(): void {
     this.isRecording = false;
     this.isPaused = false;
+
+    // Stop Native Android Speech Recognizer if active
+    const androidBridge = (window as any).AndroidSpeechBridge;
+    if (androidBridge && typeof androidBridge.stopListening === 'function') {
+      try {
+        androidBridge.stopListening();
+      } catch (e) {}
+    }
 
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);

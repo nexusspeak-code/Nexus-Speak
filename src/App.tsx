@@ -152,6 +152,9 @@ export const App: React.FC = () => {
     setIsRecording(false);
     setIsPaused(false);
 
+    // Allow native Android speech recognizer a brief window to finalize speech results
+    await new Promise((r) => setTimeout(r, 350));
+
     // 1. Capture live speech text before stopping audio engine
     const liveText = speechAudioEngine.livePreviewText.trim() || interimTranscript.trim();
 
