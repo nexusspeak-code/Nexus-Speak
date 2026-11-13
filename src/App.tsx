@@ -152,8 +152,16 @@ export const App: React.FC = () => {
     setIsRecording(false);
     setIsPaused(false);
 
-    // Allow native Android speech recognizer a brief window to finalize speech results
-    await new Promise((r) => setTimeout(r, 350));
+    // If native Android bridge is active, stop listening and wait for final results
+    const androidBridge = (window as any).AndroidSpeechBridge;
+    if (androidBridge && typeof androidBridge.stopListening === 'function') {
+      try {
+        androidBridge.stopListening();
+      } catch (e) {}
+    }
+
+    // Allow native Android speech recognizer a brief window to deliver final speech results
+    await new Promise((r) => setTimeout(r, 600));
 
     // 1. Capture live speech text before stopping audio engine
     const liveText = speechAudioEngine.livePreviewText.trim() || interimTranscript.trim();
